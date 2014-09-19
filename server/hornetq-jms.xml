@@ -1,0 +1,24 @@
+<configuration xmlns="urn:hornetq"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="urn:hornetq /schema/hornetq-jms.xsd">
+   <!--the connection factory used by the example-->
+   <connection-factory name="ConnectionFactory">
+      <connectors>
+         <connector-ref connector-name="netty"/>
+      </connectors>
+      <entries>
+         <entry name="SimpleConnectionFactory"/>
+      </entries>      
+   </connection-factory>
+
+   <!--the queue for point-to-point-->
+   <queue name="CS3213SimpleQueue">
+      <entry name="SimpleQueue"/>
+   </queue>
+   
+   <!--the topic for pub-sub-->
+   <topic name="CS3213SimpleTopic">
+      <entry name="SimpleTopic"/>
+   </topic>
+
+</configuration>
