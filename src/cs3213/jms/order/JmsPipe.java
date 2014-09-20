@@ -20,17 +20,19 @@ import java.util.Properties;
 
 public class JmsPipe implements IPipe, MessageListener {
     private QueueConnectionFactory _qconFactory;
-    private QueueConnection _qcon;
-    private QueueSession _senderQsession;
-    private QueueSession _receiverQsession;
-    private QueueSender _qsender;
-    private TextMessage _senderTextMsg;
-    private QueueReceiver _qreceiver;
-    private Queue _receiverQueue;
-    private Queue _senderQueue;
-
     private String _factoryName;
     private String _queueName;
+
+    private QueueConnection _senderQcon;
+    private QueueSession _senderQsession;
+    private QueueSender _qsender;
+    private Queue _senderQueue;
+    private TextMessage _senderTextMsg;
+
+    private QueueConnection _receiverQcon;
+    private QueueSession _receiverQsession;
+    private QueueReceiver _qreceiver;
+    private Queue _receiverQueue;
 
     private List<String> _receiverMsgs;
 
@@ -85,7 +87,7 @@ public class JmsPipe implements IPipe, MessageListener {
     public void onMessage(Message msg) {
         try {
             if (msg instanceof TextMessage) {
-                _receiverMsgs.add(((TextMessage)msg).getText());
+                _receiverMsgs.add(((TextMessage) msg).getText());
             } else {
                 _receiverMsgs.add(msg.toString());
             }
@@ -97,10 +99,15 @@ public class JmsPipe implements IPipe, MessageListener {
     @Override
     public void close() {
         try {
-            _qsender.close();
-            _qreceiver.close();
-            _senderQsession.close();
-            _qcon.close();
+            if (_isSenderInitialized) {
+                _qsender.close();
+                _senderQsession.close();
+                _senderQcon.close();
+            } else if (_isReceiverInitialized) {
+                _qreceiver.close();
+                _receiverQsession.close();
+                _receiverQcon.close();
+            }
         } catch (JMSException e) {
             e.printStackTrace();
         }
@@ -117,22 +124,24 @@ public class JmsPipe implements IPipe, MessageListener {
 
     public void initSender(Context ctx) throws NamingException, JMSException {
         _qconFactory = (QueueConnectionFactory) ctx.lookup(this._factoryName);
-        _qcon = _qconFactory.createQueueConnection();
-        _senderQsession = _qcon.createQueueSession(false, Session.AUTO_ACKNOWLEDGE);
+        _senderQcon = _qconFactory.createQueueConnection();
+        _senderQsession = _senderQcon.createQueueSession(false, Session.AUTO_ACKNOWLEDGE);
         _senderQueue = (Queue) ctx.lookup(_queueName);
         _qsender = _senderQsession.createSender(_senderQueue);
         _senderTextMsg = _senderQsession.createTextMessage();
-        _qcon.start();
+        _senderQcon.start();
+        _isSenderInitialized = true;
     }
 
     public void initReceiver(Context ctx) throws JMSException, NamingException {
         _qconFactory = (QueueConnectionFactory) ctx.lookup(this._factoryName);
-        _qcon = _qconFactory.createQueueConnection();
-        _receiverQsession = _qcon.createQueueSession(false, Session.AUTO_ACKNOWLEDGE);
+        _receiverQcon = _qconFactory.createQueueConnection();
+        _receiverQsession = _receiverQcon.createQueueSession(false, Session.AUTO_ACKNOWLEDGE);
         _receiverQueue = (Queue) ctx.lookup(_queueName);
         _qreceiver = _receiverQsession.createReceiver(_receiverQueue);
         _qreceiver.setMessageListener(this);
-        _qcon.start();
+        _receiverQcon.start();
+        _isReceiverInitialized = true;
     }
     
 }
