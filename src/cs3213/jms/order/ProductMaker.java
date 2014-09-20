@@ -28,7 +28,7 @@ public class ProductMaker extends Filter {
     
     public static void main(String[] args) {
         try {
-            ProductMaker or = new ProductMaker();            
+            ProductMaker or = new ProductMaker();
             
             if (args.length > 0 && args[0].equals("tcp"))
                 or.setPipeIn(new TcpPipe(20140, "127.0.0.1", 41020));

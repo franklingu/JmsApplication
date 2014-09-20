@@ -4,11 +4,13 @@ import javax.jms.*;
 import javax.naming.Context;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
+import java.util.LinkedList;
+import java.util.List;
 import java.util.Properties;
 
 /**
- * Matric 1:
- * Name   1:
+ * Matric 1: A0105750N
+ * Name   1: Gu Junchao
  * 
  * Matric 2:
  * Name   2:
@@ -19,32 +21,40 @@ import java.util.Properties;
 public class JmsPipe implements IPipe, MessageListener {
     private QueueConnectionFactory _qconFactory;
     private QueueConnection _qcon;
-    private QueueSession _qsession;
+    private QueueSession _senderQsession;
+    private QueueSession _receiverQsession;
     private QueueSender _qsender;
     private TextMessage _senderTextMsg;
     private QueueReceiver _qreceiver;
-    private Queue _queue;
+    private Queue _receiverQueue;
+    private Queue _senderQueue;
 
     private String _factoryName;
     private String _queueName;
 
-    private String _receiverMsgLine;
+    private List<String> _receiverMsgs;
+
+    private boolean _isSenderInitialized;
+    private boolean _isReceiverInitialized;
 
     public JmsPipe(String factoryName, String queueName) {
         _factoryName = factoryName;
         _queueName = queueName;
-        try {
-            init(getInitialContext());
-        } catch (NamingException e) {
-            e.printStackTrace();
-        } catch (JMSException e) {
-            e.printStackTrace();
-        }
+        _receiverMsgs = new LinkedList<String>();
+        _isReceiverInitialized = false;
+        _isSenderInitialized = false;
     }
 
     @Override
     public void write(Order s) {
         try {
+            if (!_isSenderInitialized) {
+                try {
+                    initSender(getInitialContext());
+                } catch (NamingException nme) {
+                    nme.printStackTrace();
+                }
+            }
             _senderTextMsg.setText(s.toString() + "\n");
             _qsender.send(_senderTextMsg);
         } catch (JMSException e) {
@@ -54,11 +64,20 @@ public class JmsPipe implements IPipe, MessageListener {
 
     @Override
     public Order read() {
-        if (_receiverMsgLine == null) {
+        if (!_isReceiverInitialized) {
+            try {
+                initReceiver(getInitialContext());
+            } catch (NamingException nme) {
+                nme.printStackTrace();
+            } catch (JMSException jmse) {
+                jmse.printStackTrace();
+            }
+        }
+        if (_receiverMsgs.isEmpty()) {
             return null;
         }
-        Order o = Order.fromString(_receiverMsgLine);
-        _receiverMsgLine = null;
+        String str = _receiverMsgs.remove(_receiverMsgs.size() - 1);
+        Order o = Order.fromString(str);
         return o;
     }
 
@@ -66,9 +85,9 @@ public class JmsPipe implements IPipe, MessageListener {
     public void onMessage(Message msg) {
         try {
             if (msg instanceof TextMessage) {
-                _receiverMsgLine = ((TextMessage) msg).getText();
+                _receiverMsgs.add(((TextMessage)msg).getText());
             } else {
-                _receiverMsgLine = msg.toString();
+                _receiverMsgs.add(msg.toString());
             }
         } catch (JMSException jmse) {
             System.err.println("An exception occurred: " + jmse.getMessage());
@@ -80,7 +99,7 @@ public class JmsPipe implements IPipe, MessageListener {
         try {
             _qsender.close();
             _qreceiver.close();
-            _qsession.close();
+            _senderQsession.close();
             _qcon.close();
         } catch (JMSException e) {
             e.printStackTrace();
@@ -96,17 +115,23 @@ public class JmsPipe implements IPipe, MessageListener {
         return new InitialContext(props);
     }
 
-    public void init(Context ctx)
-            throws NamingException, JMSException {
+    public void initSender(Context ctx) throws NamingException, JMSException {
         _qconFactory = (QueueConnectionFactory) ctx.lookup(this._factoryName);
         _qcon = _qconFactory.createQueueConnection();
-        _qsession = _qcon.createQueueSession(false, Session.AUTO_ACKNOWLEDGE);
-        _queue = (Queue) ctx.lookup(_queueName);
-        _qreceiver = _qsession.createReceiver(_queue);
-        _qreceiver.setMessageListener(this);
+        _senderQsession = _qcon.createQueueSession(false, Session.AUTO_ACKNOWLEDGE);
+        _senderQueue = (Queue) ctx.lookup(_queueName);
+        _qsender = _senderQsession.createSender(_senderQueue);
+        _senderTextMsg = _senderQsession.createTextMessage();
+        _qcon.start();
+    }
 
-        _qsender = _qsession.createSender(_queue);
-        _senderTextMsg = _qsession.createTextMessage();
+    public void initReceiver(Context ctx) throws JMSException, NamingException {
+        _qconFactory = (QueueConnectionFactory) ctx.lookup(this._factoryName);
+        _qcon = _qconFactory.createQueueConnection();
+        _receiverQsession = _qcon.createQueueSession(false, Session.AUTO_ACKNOWLEDGE);
+        _receiverQueue = (Queue) ctx.lookup(_queueName);
+        _qreceiver = _receiverQsession.createReceiver(_receiverQueue);
+        _qreceiver.setMessageListener(this);
         _qcon.start();
     }
     
